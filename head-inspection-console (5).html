@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HEAD-A Inspection Console</title>
+<style>
+  :root{
+    --bg:#0e1621; --panel:#16212e; --panel2:#1b2734; --line:#26364a;
+    --text:#e7eef5; --muted:#8496a8; --dim:#5f7183;
+    --cyan:#34c6d8; --ok:#38d07f; --ng:#ff5f6d; --warn:#f2b544;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;
+    background-image:radial-gradient(circle at 12% -10%,#17293a 0,transparent 45%),radial-gradient(circle at 100% 0,#141f2c 0,transparent 40%);}
+  a{color:var(--cyan)}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px}
+
+  /* header */
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
+    border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:20px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:14px}
+  .glyph{width:38px;height:38px;flex:0 0 auto}
+  h1{font-size:19px;letter-spacing:.02em;margin:0;font-weight:650}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .tag{font-family:var(--mono);font-size:11px;color:var(--cyan);border:1px solid var(--line);
+    border-radius:999px;padding:3px 10px;letter-spacing:.06em}
+
+  /* dropzone */
+  .drop{border:1.5px dashed #33475e;border-radius:14px;background:linear-gradient(180deg,#16212e,#131d29);
+    padding:40px 26px;text-align:center;transition:.18s;position:relative;overflow:hidden}
+  .drop.hot{border-color:var(--cyan);background:linear-gradient(180deg,#183241,#131f2b);box-shadow:0 0 0 3px #34c6d81f inset}
+  .drop h2{margin:0 0 6px;font-size:17px;font-weight:600}
+  .drop p{margin:0 0 18px;color:var(--muted)}
+  .scan-ln{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+    top:0;opacity:0;pointer-events:none}
+  .drop.hot .scan-ln{opacity:.8;animation:scan 1.4s linear infinite}
+  @keyframes scan{0%{top:0}100%{top:100%}}
+
+  .btn{font-family:var(--sans);font-size:13.5px;font-weight:550;color:var(--text);
+    background:#213244;border:1px solid var(--line);border-radius:9px;padding:9px 16px;cursor:pointer;transition:.15s}
+  .btn:hover{border-color:#3a5470;background:#26394d}
+  .btn.primary{background:var(--cyan);color:#04222a;border-color:transparent}
+  .btn.primary:hover{background:#4ad3e4}
+  .btn.ghost{background:transparent}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.danger:hover{border-color:var(--ng);color:var(--ng)}
+
+  /* console layout */
+  .console{display:none;grid-template-columns:300px 1fr;gap:18px;margin-top:4px}
+  @media(max-width:820px){.console{grid-template-columns:1fr}}
+  .add-bar{grid-column:1/-1;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;
+    border:1.5px dashed #33475e;border-radius:11px;background:#14202c;padding:11px 16px;color:var(--muted);font-size:13px}
+  .add-bar.hot{border-color:var(--cyan);background:#173241;box-shadow:0 0 0 3px #34c6d81f inset}
+  .add-bar .btn{margin-left:auto}
+  .add-ico{font-family:var(--mono);font-size:18px;color:var(--cyan);font-weight:700}
+  .src-list{max-height:220px;overflow:auto}
+  .src-row{display:flex;justify-content:space-between;gap:10px;padding:6px 8px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11.5px}
+  .src-row:last-child{border-bottom:none}
+  .src-nm{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .src-ct{color:var(--cyan);flex:0 0 auto}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px}
+  .panel h3{margin:0 0 12px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600}
+
+  /* live monitor */
+  .monitor{position:relative}
+  #monCanvas{width:100%;aspect-ratio:1;border-radius:9px;background:#0a1219;display:block;image-rendering:pixelated;border:1px solid var(--line)}
+  .mon-empty{position:absolute;inset:16px 16px auto 16px;top:44px;color:var(--dim);text-align:center;font-family:var(--mono);
+    font-size:12px;display:flex;align-items:center;justify-content:center;aspect-ratio:1}
+  .mon-meta{margin-top:11px;font-family:var(--mono);font-size:12px;color:var(--muted);
+    display:flex;justify-content:space-between;gap:8px}
+  .mon-meta b{color:var(--text);font-weight:600}
+  .verdict-pill{font-family:var(--mono);font-weight:700;font-size:12px;padding:2px 10px;border-radius:6px;letter-spacing:.05em}
+  .v-ok{background:#0f2e21;color:var(--ok)}
+  .v-ng{background:#33161a;color:var(--ng)}
+  .v-err{background:#33290f;color:var(--warn)}
+  .fname{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:8px;word-break:break-all;min-height:15px}
+  #spark{width:100%;height:34px;margin-top:12px;display:block}
+
+  /* stats */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .stat .k{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+  .stat .v{font-family:var(--mono);font-size:23px;font-weight:600;margin-top:3px;letter-spacing:-.01em}
+  .stat.ok .v{color:var(--ok)} .stat.ng .v{color:var(--ng)} .stat.err .v{color:var(--warn)} .stat.skip .v{color:var(--dim)}
+  .v-skip{background:#1c2734;color:var(--muted)}
+
+  .progress{height:7px;background:#0c141d;border-radius:99px;overflow:hidden;margin:16px 0 6px;border:1px solid var(--line)}
+  .progress > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),#5ad8e7);transition:width .2s}
+  .prog-lbl{font-family:var(--mono);font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between}
+
+  .toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:16px}
+  .thr{display:flex;align-items:center;gap:9px;margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .thr input{width:64px;background:#0c141d;border:1px solid var(--line);color:var(--text);border-radius:7px;
+    padding:6px 8px;font-family:var(--mono);font-size:13px}
+
+  /* tables */
+  section.block{margin-top:20px}
+  .block-h{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+  .block-h h3{margin:0;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  .count-chip{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:2px 9px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+  th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600}
+  td.num,th.num{text-align:right;font-family:var(--mono)}
+  tbody tr:hover{background:#182534}
+  .bar-mini{height:5px;border-radius:3px;background:#0c141d;overflow:hidden;min-width:60px}
+  .bar-mini>i{display:block;height:100%;background:var(--ng)}
+
+  .search{background:#0c141d;border:1px solid var(--line);color:var(--text);border-radius:8px;
+    padding:8px 12px;font-family:var(--mono);font-size:12.5px;width:230px}
+  .ng-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:11px}
+  .ng-card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px;cursor:pointer;transition:.14s}
+  .ng-card:hover{border-color:var(--ng);transform:translateY(-2px)}
+  .ng-card .ph{aspect-ratio:1;border-radius:6px;background:#0a1219;display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:20px;font-weight:700;color:var(--ng);border:1px solid var(--line)}
+  .ng-card .nm{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ng-card .gp{font-family:var(--mono);font-size:11px;color:var(--ng);margin-top:2px}
+  .pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+  /* modal */
+  .modal{position:fixed;inset:0;background:#060b11cc;backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal.on{display:flex}
+  .modal-inner{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:560px;width:100%}
+  .modal canvas{width:100%;border-radius:9px;image-rendering:pixelated;background:#0a1219;border:1px solid var(--line)}
+  .modal-meta{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-family:var(--mono);font-size:12px}
+  .close-x{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+  .legend{display:flex;gap:16px;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:22px;height:2px;vertical-align:middle;margin-right:5px}
+  .foot{margin-top:34px;color:var(--dim);font-size:11.5px;text-align:center;font-family:var(--mono)}
+  .hint{font-size:11.5px;color:var(--dim);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg class="glyph" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="20" r="18" stroke="#34c6d8" stroke-width="1.4" opacity=".5"/>
+        <path d="M6 22 L20 27 L34 22" stroke="#ff5f6d" stroke-width="1.6" fill="none"/>
+        <circle cx="20" cy="27" r="2.4" fill="#34c6d8"/>
+        <path d="M13 12h14v5h-5v6h-4v-6h-5z" fill="#e7eef5" opacity=".85"/>
+      </svg>
+      <div>
+        <h1>HEAD-A Inspection Console</h1>
+        <div class="sub">ตรวจ OK/NG อัตโนมัติ — วัดระยะที่ฟีเจอร์ยื่นต่ำกว่าเส้นอ้างอิง holder</div>
+      </div>
+    </div>
+    <span class="tag" id="engTag">ENGINE · LOCAL</span>
+  </header>
+
+  <!-- INTAKE -->
+  <div id="intake" class="drop" tabindex="0">
+    <div class="scan-ln"></div>
+    <h2>ลากมาวางที่นี่ทีเดียวได้เลย</h2>
+    <p>วางพร้อมกันได้หลายโฟลเดอร์ หรือไฟล์ภาพหลายไฟล์คละกันในการวางครั้งเดียว — ระบบไล่หาไฟล์ในโฟลเดอร์ย่อยเองทั้งหมด<br>
+       ประมวลผลในเครื่องคุณล้วน ไม่มีการอัปโหลดไฟล์ออกไปที่ใด</p>
+    <button class="btn primary" id="pickBtn">เลือกโฟลเดอร์…</button>
+    <input id="dirInput" type="file" webkitdirectory directory multiple hidden>
+    <div class="hint" style="margin-top:14px">รองรับ .bmp .png .jpg .jpeg &nbsp;•&nbsp; ใช้ Web Worker <span id="wc"></span> ตัวประมวลผลขนาน</div>
+  </div>
+
+  <!-- CONSOLE -->
+  <div id="console" class="console">
+    <!-- add more folders (spans both columns) -->
+    <div id="addBar" class="add-bar" tabindex="0">
+      <div class="scan-ln"></div>
+      <span class="add-ico">＋</span>
+      <span>ลากโฟลเดอร์หรือไฟล์เพิ่มมาที่นี่ได้เรื่อยๆ — ต่อคิวรวมกัน ไม่ล้างของเดิม</span>
+      <button class="btn" id="addPickBtn">เพิ่มโฟลเดอร์…</button>
+    </div>
+
+    <!-- left: live monitor -->
+    <div>
+      <div class="panel monitor">
+        <h3>Live monitor</h3>
+        <canvas id="monCanvas" width="256" height="256"></canvas>
+        <div class="mon-empty" id="monEmpty">รอเริ่มตรวจ…</div>
+        <div class="mon-meta">
+          <span>gap <b id="monGap">—</b> px</span>
+          <span class="verdict-pill v-ok" id="monVerdict">—</span>
+        </div>
+        <div class="fname" id="monName"></div>
+        <canvas id="spark" width="560" height="68"></canvas>
+      </div>
+
+      <section class="block" id="srcBlock" style="display:none">
+        <div class="block-h"><h3>แหล่งข้อมูล</h3><span class="count-chip" id="srcCount"></span></div>
+        <div class="panel" style="padding:8px 6px"><div id="srcList" class="src-list"></div></div>
+      </section>
+    </div>
+
+    <!-- right: stats + controls -->
+    <div>
+      <div class="panel">
+        <h3>Run summary</h3>
+        <div class="stats">
+          <div class="stat"><div class="k">Processed</div><div class="v" id="sProc">0</div></div>
+          <div class="stat ok"><div class="k">OK</div><div class="v" id="sOk">0</div></div>
+          <div class="stat ng"><div class="k">NG</div><div class="v" id="sNg">0</div></div>
+          <div class="stat skip"><div class="k">มุมอื่น (ข้าม)</div><div class="v" id="sSkip">0</div></div>
+          <div class="stat err"><div class="k">Review</div><div class="v" id="sErr">0</div></div>
+          <div class="stat"><div class="k">Speed</div><div class="v"><span id="sSpd">0</span><span style="font-size:12px;color:var(--dim)"> /s</span></div></div>
+          <div class="stat"><div class="k">Elapsed</div><div class="v" id="sTime">0.0s</div></div>
+        </div>
+        <div class="progress"><i id="progBar"></i></div>
+        <div class="prog-lbl"><span id="progTxt">0 / 0</span><span id="etaTxt"></span></div>
+
+        <div class="toolbar">
+          <button class="btn" id="pauseBtn" disabled>หยุดชั่วคราว</button>
+          <button class="btn danger" id="cancelBtn" disabled>ยกเลิก</button>
+          <button class="btn ghost" id="resetBtn">เริ่มใหม่</button>
+          <button class="btn" id="csvBtn" disabled>Export CSV</button>
+          <label class="thr">ข้ามมุมอื่นถ้า IoU &lt;
+            <input id="viewInput" type="number" value="0.90" min="0" max="1" step="0.01">
+          </label>
+          <label class="thr">NG ถ้า gap ≥
+            <input id="thrInput" type="number" value="5" min="0" step="0.5">px
+          </label>
+          <label class="thr">หรือช่องสว่างถูกถม ≥
+            <input id="fillInput" type="number" value="9" min="0" step="1">คอล.
+          </label>
+        </div>
+      </div>
+
+      <section class="block" id="folderBlock" style="display:none">
+        <div class="block-h"><h3>สรุปตามโฟลเดอร์</h3><span class="count-chip" id="folderCount"></span></div>
+        <div class="panel" style="padding:4px 4px">
+          <table>
+            <thead><tr><th>โฟลเดอร์</th><th class="num">ตรวจ (มุมเช็ค)</th><th class="num">OK</th><th class="num">NG</th><th class="num">%NG</th><th></th></tr></thead>
+            <tbody id="folderBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="block" id="ngBlock" style="display:none">
+        <div class="block-h">
+          <h3>รายการ NG</h3><span class="count-chip" id="ngCount"></span>
+          <input class="search" id="ngSearch" placeholder="ค้นหาชื่อไฟล์…" style="margin-left:auto">
+        </div>
+        <div class="ng-grid" id="ngGrid"></div>
+        <div class="pager" id="ngPager"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="foot">ประมวลผลภายในเบราว์เซอร์ทั้งหมด · ไฟล์ไม่ถูกส่งออกนอกเครื่อง · เปิดด้วย Google Chrome เพื่อผลลัพธ์ดีที่สุด</div>
+</div>
+
+<!-- detail modal -->
+<div class="modal" id="modal">
+  <div class="modal-inner">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--muted)" id="mTitle"></div>
+      <button class="close-x" id="mClose">✕</button>
+    </div>
+    <canvas id="mCanvas" width="256" height="256"></canvas>
+    <div class="modal-meta">
+      <span class="fname" id="mPath" style="margin:0"></span>
+      <span><span class="verdict-pill v-ng" id="mVerdict">NG</span> &nbsp;<b id="mGap"></b></span>
+    </div>
+    <div class="legend">
+      <span><i style="background:#ff5f6d"></i>เส้นอ้างอิง holder (baseline)</span>
+      <span><i style="background:#34c6d8"></i>จุดเช็ค / ระยะยื่น</span>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   INSPECTION ALGORITHM  (verified against reference OK/NG set)
+   grayscale 256×256 · disc r=118 · dark<70 · scan y100–174
+   pL=firstEdge(45) · pR=firstEdge(210) · check=lowest firstEdge x46–86
+   gap = check.y − baseline(check.x);  gap ≥ threshold ⇒ NG
+   ============================================================ */
+const ALGO = {DARK:70, R2:118*118, XL:45, XR:210, CX0:46, CX1:86, Y0:100, Y1:175,
+              BRIGHT:130, FX0:46, FX1:86, FY0:112, FY1:150};  // gap-fill detector params
+const FILL_THRESHOLD_DEFAULT = 9;      // >= this many filled columns = NG (subtle-protrusion mode)
+const VIEW_THRESHOLD_DEFAULT = 0.90;   // IoU >= this = check-view; below = other angle (skip)
+const TEMPLATE_B64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB//AAB//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/gAAAAA/4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+AAAAAAAD+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB+AAAAAAAAA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB+AAAAAAAAAAPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/AAAAAAAAAAAH4AAAAAAAAAAAAAAAAAAAAAAAAAAAAPgAAAAAAAAAAAD4AAAAAAAAAAAAAAAAAAAAAAAAAAAHwAAAAAAAAAAAAB8AAAAAAAAAAAAAAAAAAAAAAAAAAB4AAAAAAAAAAAAAA8AAAAAAAAAAAAAAAAAAAAAAAAAAeAAAAAAAAAAAAAAA8AAAAAAAAAAAAAAAAAAAAAAAAAHgAAAAAAAAAAAAAAA8AAAAAAAAAAAAAAAAAAAAAAAABwAAAAAAAAAAAAAAAA8AAAAAAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAAAAAAAAAAHAAAAAAAAAAAAAAAAAA8AAAAAAAAAAAAAAAAAAAAAAB4AAAAAAAAAAAAAAAAAA8AAAAAAAAAAAAAAAAAAAAAAeAAAAAAAAAAAAAAAAAAA8AAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAA4AAAAAAAAAAAAAAAAAAAAA4AAAAAAAAAAAAAAAAAAAB4AAAAAAAAAAAAAAAAAAAAHAAAAAAAAAAAAAAAAAAAABwAAAAAAAAAAAAAAAAAAABwAAAAAAAAAAAAAAAAAAAABwAAAAAAAAAAAAAAAAAAAOAAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAABgAAAAAAAAAAAAAAAAAAAAADAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAAAAAAAAAHAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAAAAOAAAAAAAAAAAAAAAAAAYAAAAAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAAAAHAAAAAAAAAAAAAAAAAAAAAAAB8AAAAAAAAAAAAAAAAA4AAAAAAAAAAAAAAAAAAAAAAAH4AAAAAAAAAAAAAAAAHAAAAAAAAAAAAAAAAAAAAAAAAfwAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAAB/gAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAH/AAAAAAAAAAAAAAAAwAAAAAAAAB////////gAAAAAAf+AAAAAAAAAAAAAAAGAAAAAAAAAP///////+AAAAAAB/8AAAAAAAAAAAAAAAwAAAAAAAAA////////4AAAAAAH/4AAAAAAAAAAAAAAGAAAAAAAAAD////////gAAAAAAf/wAAAAAAAAAAAAAAwAAAAAAAAAP///////+AAAAAAB//gAAAAAAAAAAAAAGAAAAAAAAAA////////4AAAAAAH//AAAAAAAAAAAAAAwAAAAAAAAAD////////gAAAAAAf/+AAAAAAAAAAAAAGAAAAAAAAAAP///////+AAAAAAD//8AAAAAAAAAAAAAwAAAAAAAAAA////////4AAAAAAP//4AAAAAAAAAAAAGAAAAAAAAAAD////////gAAAAAA///wAAAAAAAAAAAAwAAAAAAAAAAP///////+AAAAAAD///gAAAAAAAAAAAHAAAAAAAAAAA////////4AAAAAAP///AAAAAAAAAAAAYAAAAAAAAAAD////////gAAAAAA///8AAAAAAAAAAADAAAAAAAAAAAP///////+AAAAAAD///4AAAAAAAAAAAYAAAAAAAAAAA////////4AAAAAAP///wAAAAAAAAAADAAAAAAAAAAAD////////gAAAAAA////gAAAAAAAAAAMAAAAAAAAAAAH///////+AAAAAAD///+AAAAAAAAAABgAAAAAAAAAAAAAD///AAAAAAAAAP///8AAAAAAAAAAMAAAAAAAAAAAAAAP//8AAAAAAAAA////4AAAAAAAAABgAAAAAAAAAAAAAA///wAAAAAAAAD////wAAAAAAAAAGAAAAAAAAAAAAAAH///AAAAAAAAAP////AAAAAAAAAAwAAAAAAAAAAAAAAf//8AAAAAAAAA////+AAAAAAAAAGAAAAAAAAAAAAAAP///wAAAAAAAAH////8AAAAAAAAAYAAAAAAAAAA////////gAAAAAAAAf////wAAAAAAAADAAAAAAAAAAP///////////4AAAAB/////gAAAAAAAAYAAAAAAAAAB////////////wAAAAH/////AAAAAAAABgAAAAAAAAAH////////////AAAAAf////8AAAAAAAAMAAAAAAAAAAf///////////8AAAAB/////4AAAAAAAAwAAAAAAAAH/////////////wAAAAH/////gAAAAAAAGAAAAAAAAA//////////////AAAAAf/////AAAAAAAAYAAAAAAAAD/////////////8AAAAB/////sAAAAAAADAAAAAAAAAP/////////////wAAAAH////+YAAAAAAAIAAAAAAAAA//////////////AAAAAf////5gAAAAAABgAAAAAAAAD/////////////8AAAAB/////jAAAAAAAEAAAAAAAAAP/////////////wAAAAH////+MAAAAAAAwAAAAAAAAA//////////////AAAAAf////4YAAAAAACAAAAAAAAAD/////////////8AAAAB/////hgAAAAAAYAAAAAAAAAP//////////////AAAAP////+DAAAAAABgAAAAAAAAA//////////////8AAAA/////4MAAAAAAMAAAAAAAAAf/////////////4AAAAD/////gYAAAAAAwAAAAAAAAB//////////////wAAAAP////+BgAAAAAGAAAAAAAAAH//////////////AAAAA/////4DAAAAAAYAAAAAAAAAf/////////////8AAAAD/////gMAAAAABH/+AAAAAAB///////////////4AAAP////+AwAAAAAM//////4AAH////////////////AAA/////4BgAAAAA//////////////////////////8AAD/////gGAAAAAG//////////////////////////wAAP////+AMAAAAAf/////////////////////////+AAA/////4AwAAAAB//////////////////////////4AAH/////gDAAAAAN//////////////////////////wAAf////+AGAAAAA3///////////////////////////+B/////4AYAAAADf//////////////////////////////////gBgAAAAJ///////////////////////////////////ACAAAABn///////////////////////////////////gMAAAAGP///////////////////////////////////AwAAAAQ///////////////////////////////////+DAAAADD///////////////////////////////////8GAAAAMP///////////////////////////////////wYAAAAw////////////////////////////////////hgAAACD///////////////////////////////////+CAAAAYP///////////////////////////////////4MAAABg////////////////////////////////////gwAAAGH///////////////////////////////////8DAAAAQf///////////////////////////////////wMAAABB////////////////////////////////////AQAAAMH///////////////////////////////////8BgAAAwf///////////////////////////////////wGAAADB////////////////////////////////////AYAAAMH////////////////////////x//////////8BgAAAgf////////////////////////H//////////wGAAACB////////////////////////8f//////////AIAAAYH////////////////////////h//////////8AwAABgf///////////////////////+D//////////wDAAAGB////////////////////////4B//////////MMAAAYH////////////////////////gP/////////8wwAABgf///////////////////////+A//////////3DAAAGB////////////////////////4D//////////YMAAAYH////////////////////////gP//////////gwAABAP///////////////////////+A//////////+DAAAEA////////////////////////4D//////////4MAAAQB////////////////////////gP//////////AQAABAB///////////////////////+A//////////8BAAAEAAAP/////////////////////4D//////////gEAAAQAAAf/////////////////////gP/////////+AQAABAAAAAB///////////////////+A//////////wBAAAEAAAAAH///////////////////4B//////////AEAAAwAAAAAP///////////////////wH/////////4AYAABAAAAAA////////////////////AP/////////gBAAAEAAAAAD/////8H////////////8Af////////+AEAAAQAAAAAH///4AA/////////////wEB////////4AQAABAAAAAAf//8Af//////////////78AAAP/////ABAAAEAAAAAAABz2P////////////////+v/AAAAf/8AEAAAQAAAAAAA3//////////////////////8AAAAAAAQAABAAAAAAAP///////////////////////8AAAAAADAAAEAAAAAAA////////////////////////wAAAAAAMAAAYAAAAAAP////////////////////////wAAAAAAwAABgAAAAAA/////////////////////////AAAAAADAAAGAAAAAAH////////////////////////8AAAAAAMAAAYAAAAAAf////////////////////////4AAAAAAwAABgAAAAAB/////////////////////////gAAAAADAAAGAAAAAAP////////////////////////+AAAAAAMAAAYAAAAAA/////////////////////////8AAAAAAwAAAgAAAAAD/////////////////////////wAAAAACAAACAAAAP////////////////////////////AAAAAYAAAMAAAB/////////////////////////////8AAABgAAAwAAAH/////////////////////////////wAAAGAAADAAAAf/////////////////////////////AAAAYAAAMAAAD/////////////////////////////8AAABgAAAQAAAP/////////////////////////////wAAAEAAABAAAA//////////////////////////////AAAAwAAAGAAAD/////////////////////////////8AAADAAAAYAAAP/////////////////////////////wAAAMAAABgAAA//////////////////////////////AAAAwAAACAAAD/////////////////////////////8AAAGAAAAMAAAP/////////////////////////////4AAAYAAAAwAAA//////////////////////////////gAABgAAADAAAD/////////////////////////////+AAAGAAAAEAAAP/////////////////////////////4AAAwAAAAYAAA//////////////////////////////gAADAAAABgAAD/////////////////////////////+AAAMAAAACAAAP/////////////////////////////4AAAgAAAAMAAA//////////////////////////////gAAGAAAAAwAAD/////////////////////////////+AAAYAAAADAAAP/////////////////////////////4AABgAAAAGAAA//////////////////////////////gAAMAAAAAYAAD/////////////////////////////+AAAwAAAABgAAP/////////////////////////////4AADAAAAADAAA//////////////////////////////gAAYAAAAAMAAD/////////////////////////////+AABgAAAAAQAAH/////////////////////////////4AAMAAAAABgAA//////////////////////////////gAAwAAAAAGAAD/////////////////////////////+AADAAAAAAMAAP/////////////////////////////4AAYAAAAAAwAA//////////////////////////////gABgAAAAABgAD/////////////////////////////+AAMAAAAAAGAAP/////////////////////////////4AAwAAAAAAMAA//////////////////////////////gAGAAAAAAAwAD/////////////////////////////+AAYAAAAAABAAP/////////////////////////////4ADAAAAAAAGAAf/////////////////////////////gAMAAAAAAAMAB/////////////////////////////+ABgAAAAAAAwAH/////////////////////////////wAGAAAAAAABgAf/////////////////////////////gAwAAAAAAAGAB/////////////////////////////8ADAAAAAAAAMAH/////////////////////////////wAYAAAAAAAAwAf/////////////////////////////ABgAAAAAAABgB/////////////////////////////8AMAAAAAAAAHAH/////////////////////////////gBwAAAAAAAAMAAAf/////////////////////////4AAGAAAAAAAAAYAAA/////////////////////////wAAAwAAAAAAAABgAAD/////////////////////////AAAHAAAAAAAAADAAAD////////////////////////4AAAYAAAAAAAAAGAAAH////////////////////////AAADAAAAAAAAAAYAAAP///////////////////////4AAAcAAAAAAAAAAwAAB////////////////////////gAABgAAAAAAAAABgAAD///////////////////////8AAAMAAAAAAAAAADAAAD///////////////////////gAABgAAAAAAAAAAMAAAH//////////////////////8AAAOAAAAAAAAAAAYAAAf//////////////////////wAAAwAAAAAAAAAAAwAAB//////////////////////8AAAGAAAAAAAAAAABgAAB//////////////////////wAAAwAAAAAAAAAAAHAAAD/////////////////////6AAAHAAAAAAAAAAAAOAAAA/8f///////////+BPnA//AAAA4AAAAAAAAAAAAYAAAAAAAAAH////////4AAAAAAAAAHAAAAAAAAAAAAAwAAAAAAAAAf////////gAAAAAAAAAYAAAAAAAAAAAABgAAAAAAAAB/////////AAAAAAAAADAAAAAAAAAAAAADAAAAAAAAAH////////8AAAAAAAAAYAAAAAAAAAAAAAGAAAAAAAAA/////////wAAAAAAAADAAAAAAAAAAAAAAMAAAAAAAD///////////AAAAAAAAYAAAAAAAAAAAAAAYAAAAAAAP//////////8AAAAAAADAAAAAAAAAAAAAAAwAAAAAAA//////////////wf/6AYAAAAAAAAAAAAAABgH////////////////////////7AAAAAAAAAAAAAAAD//////////////////////////4AAAAAAAAAAAAAAAH//////////////////////////AAAAAAAAAAAAAAAAP/////////////////////////4AAAAAAAAAAAAAAAAf/////////////////////////AAAAAAAAAAAAAAAAA/////////////////////////4AAAAAAAAAAAAAAAAB/////////////////////////AAAAAAAAAAAAAAAAAB////////////////////////wAAAAAAAAAAAAAAAAAD///////////////////////+AAAAAAAAAAAAAAAAAAH///////////////////////wAAAAAAAAAAAAAAAAAAH//////////////////////8AAAAAAAAAAAAAAAAAAAP//////////////////////gAAAAAAAAAAAAAAAAAAAf/////////////////////8AAAAAAAAAAAAAAAAAAAAf/////////////////////AAAAAAAAAAAAAAAAAAAAA/////////////////////4AAAAAAAAAAAAAAAAAAAAA////////////////////+AAAAAAAAAAAAAAAAAAAAAB////////////////////wAAAAAAAAAAAAAAAAAAAAAB///////////////////8AAAAAAAAAAAAAAAAAAAAAAB///////////////////AAAAAAAAAAAAAAAAAAAAAAAB//////////////////wAAAAAAAAAAAAAAAAAAAAAAAB/////////////////8AAAAAAAAAAAAAAAAAAAAAAAAB/////////////////AAAAAAAAAAAAAAAAAAAAAAAAAB////////////////wAAAAAAAAAAAAAAAAAAAAAAAAAB///////////////8AAAAAAAAAAAAAAAAAAAAAAAAAAB///////////////AAAAAAAAAAAAAAAAAAAAAAAAAAAA//////////////gAAAAAAAAAAAAAAAAAAAAAAAAAAAA/////////////4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAf///////////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH//////////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/////////+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA////////+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH//////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";  // packed 256x256 mask of the check-view silhouette
+
+/* worker source — decodes + inspects off the main thread */
+const WORKER_SRC = `
+const A=${JSON.stringify(ALGO)};
+/* unpack the check-view template (packed 256*256 bit mask) once */
+const TB="${TEMPLATE_B64}";
+const TPL=(()=>{ const bin=atob(TB); const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  const m=new Uint8Array(65536);
+  for(let i=0;i<65536;i++){ m[i]=(bytes[i>>3]>>(7-(i&7)))&1; } return m; })();
+function inDisc(x,y){const dx=x-128,dy=y-128;return dx*dx+dy*dy<=A.R2;}
+/* IoU of image dark-mask (within disc) vs the check-view template = "view score" */
+function viewScore(d){
+  let inter=0,uni=0;
+  for(let y=0;y<256;y++){ const dy=y-128;
+    for(let x=0;x<256;x++){ const dx=x-128; if(dx*dx+dy*dy>A.R2) continue;
+      const i=(y*256+x)*4; const dark=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)<A.DARK?1:0;
+      const t=TPL[y*256+x]; if(dark|t){uni++; if(dark&t)inter++;} } }
+  return uni?inter/uni:0;
+}
+function inspect(d){ // d = Uint8ClampedArray RGBA 256*256
+  const g=(x,y)=>{const i=(y*256+x)*4;return d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114;};
+  function edge(xc){let seen=false,last=null;
+    for(let y=A.Y0;y<A.Y1;y++){ if(!inDisc(xc,y))continue;
+      if(g(xc,y)<A.DARK){seen=true;last=y;} else if(seen)return last; }
+    return last;}
+  /* gap-fill: # of columns in the check zone whose bright gap has been filled by
+     the feature protruding into it (subtle-NG signature). No bright pixel = filled. */
+  let fill=0;
+  for(let xc=A.FX0;xc<A.FX1;xc++){ let bright=false;
+    for(let y=A.FY0;y<A.FY1;y++){ if(inDisc(xc,y)&&g(xc,y)>A.BRIGHT){bright=true;break;} }
+    if(!bright) fill++; }
+  const pLy=edge(A.XL), pRy=edge(A.XR);
+  let best=null;
+  for(let xc=A.CX0;xc<=A.CX1;xc++){const e=edge(xc); if(e!==null&&(best===null||e>best.y))best={x:xc,y:e};}
+  if(pLy===null||pRy===null||best===null) return {err:true, fill};
+  const m=(pRy-pLy)/(A.XR-A.XL), base=pLy+m*(best.x-A.XL), gap=best.y-base;
+  return {pL:[A.XL,pLy],pR:[A.XR,pRy],pC:[best.x,best.y],base,gap,fill};
+}
+let cv=null,ctx=null;
+self.onmessage=async(e)=>{
+  const {id,file,wantThumb}=e.data;
+  try{
+    const bmp=await createImageBitmap(file);
+    if(!cv){cv=new OffscreenCanvas(256,256);ctx=cv.getContext('2d',{willReadFrequently:true});}
+    ctx.drawImage(bmp,0,0,256,256);
+    const img=ctx.getImageData(0,0,256,256);
+    const iou=viewScore(img.data);
+    const r=inspect(img.data);
+    let thumb=null;
+    if(wantThumb){ const blob=await cv.convertToBlob({type:'image/png'}); thumb=blob; }
+    bmp.close();
+    self.postMessage({id, iou, ...r, thumb});
+  }catch(err){ self.postMessage({id, err:true, msg:String(err&&err.message||err)}); }
+};
+`;
+
+/* ---------- state ---------- */
+const HW = Math.min(Math.max(navigator.hardwareConcurrency||4,2),8);
+document.getElementById('wc').textContent = HW;
+let workers=[], idleW=[], jobMap=new Map(), fileStore=new Map();
+let queue=[], nextId=0, dispatched=0, done=0;
+let results=[];               // {id,name,path,folder,gap,err}
+let running=false, paused=false, startT=0, lastSampleT=0;
+let spark=[];                 // throughput samples
+let curThreshold=5;
+let curViewThr=VIEW_THRESHOLD_DEFAULT;   // IoU gate: below this = other angle, skipped
+let curFillThr=FILL_THRESHOLD_DEFAULT;   // gap-fill columns: >= this = NG (subtle protrusion)
+
+/* ---------- worker pool ---------- */
+function initPool(){
+  const url=URL.createObjectURL(new Blob([WORKER_SRC],{type:'text/javascript'}));
+  for(let i=0;i<HW;i++){
+    const w=new Worker(url); w.onmessage=onWorkerDone;
+    workers.push(w); idleW.push(w);
+  }
+  URL.revokeObjectURL(url);
+}
+function pump(){
+  while(idleW.length && queue.length && running && !paused){
+    const job=queue.shift(); const w=idleW.pop();
+    const now=performance.now();
+    const wantThumb = (now-lastSampleT)>90;   // sample ~10 previews/sec for the live monitor
+    if(wantThumb) lastSampleT=now;
+    jobMap.set(job.id,{w,job});
+    dispatched++;
+    w.postMessage({id:job.id,file:job.file,wantThumb});
+  }
+  if(running && scanning===0 && done===total && total>0) finish();
+}
+function onWorkerDone(e){
+  const {id,err,gap,iou,fill,pL,pR,pC,base,thumb,msg}=e.data;
+  const rec=jobMap.get(id); if(!rec) return;
+  idleW.push(rec.w); jobMap.delete(id);
+  const j=rec.job;
+  const res={id, name:j.name, path:j.path, folder:j.folder, gap: err?null:gap, fill:(fill==null?null:fill), iou:(iou==null?null:iou), err:!!err, pL,pR,pC,base};
+  results.push(res); done++;
+  if(thumb && !err){ drawMonitor(thumb, res); }
+  else if(thumb){ URL.revokeObjectURL && 0; }
+  dirty=true;
+  pump();
+}
+
+/* ---------- ingestion (accumulating) ---------- */
+const IMG_RE=/\.(bmp|png|jpe?g)$/i;
+let total=0, scanning=0;
+let sources=[];   // {folder, count}
+
+function wireDrop(el){
+  ['dragenter','dragover'].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();el.classList.add('hot');}));
+  ['dragleave','drop'].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();if(ev==='dragleave'&&e.target!==el)return;el.classList.remove('hot');}));
+  el.addEventListener('drop',async e=>{
+    e.preventDefault(); el.classList.remove('hot');
+    const its=[...e.dataTransfer.items];
+    // Preferred: File System Access handles — they don't expire, so dropping many large
+    // folders at once works reliably (unlike webkitEntry, which invalidates mid-scan).
+    if(its.length && its[0].getAsFileSystemHandle){
+      const handles=await Promise.all(its.map(i=> i.kind==='file' && i.getAsFileSystemHandle ? i.getAsFileSystemHandle().catch(()=>null) : Promise.resolve(null)));
+      const hs=handles.filter(Boolean);
+      if(hs.length){ await addFolders(async(add)=>{ for(const h of hs) await walkHandle(h,'',add); }); return; }
+    }
+    // Fallback: webkitGetAsEntry (capture all entries synchronously first)
+    const entries=its.map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);
+    if(entries.length){ await addFolders(async(add)=>{ for(const en of entries) await walkEntry(en,'',add); }); return; }
+    const fs=[...e.dataTransfer.files].filter(f=>IMG_RE.test(f.name));
+    await addFolders(async(add)=>{ fs.forEach(f=>add(f,f.name,'(root)')); });
+  });
+}
+const intake=document.getElementById('intake');
+wireDrop(intake);
+wireDrop(document.getElementById('addBar'));
+
+function bindPick(btnId){ document.getElementById(btnId).addEventListener('click',()=>document.getElementById('dirInput').click()); }
+bindPick('pickBtn');
+bindPick('addPickBtn');
+document.getElementById('dirInput').addEventListener('change',async e=>{
+  const fs=[...e.target.files].filter(f=>IMG_RE.test(f.name));
+  await addFolders(async(add)=>{
+    fs.forEach(f=>{ const rel=f.webkitRelativePath||f.name; const parts=rel.split('/');
+      const folder=parts.length>1?parts.slice(0,-1).join('/'):'(root)'; add(f,parts[parts.length-1],folder); });
+  });
+  e.target.value='';
+});
+
+/* File System Access API traversal — durable handles, reliable for big multi-folder drops */
+async function walkHandle(handle, parentPath, add){
+  try{
+    if(handle.kind==='file'){
+      if(!IMG_RE.test(handle.name)) return;
+      const f=await handle.getFile(); add(f, handle.name, parentPath||'(root)');
+    } else if(handle.kind==='directory'){
+      const here = parentPath ? parentPath+'/'+handle.name : handle.name;
+      for await (const child of handle.values()){ await walkHandle(child, here, add); }
+    }
+  }catch(err){ /* skip unreadable entry */ }
+}
+
+async function walkEntry(entry, parentPath, add){
+  if(entry.isFile){
+    if(!IMG_RE.test(entry.name)) return;
+    await new Promise(res=>entry.file(f=>{ add(f, entry.name, parentPath||'(root)'); res(); }, ()=>res()));
+  } else if(entry.isDirectory){
+    const here = parentPath ? parentPath+'/'+entry.name : entry.name;
+    const reader=entry.createReader();
+    const readBatch=()=>new Promise(res=>reader.readEntries(res, ()=>res([])));
+    let batch;
+    do{ batch=await readBatch();
+      for(const ch of batch){ await walkEntry(ch, here, add); }
+    }while(batch.length>0);
+  }
+}
+
+/* Add folders/files to the (possibly already running) queue — streams jobs in as they're
+   discovered so processing starts immediately, even mid-scan. Never wipes prior results. */
+async function addFolders(collector){
+  scanning++; setEngine('SCANNING…'); showConsole();
+  const perFolder=new Map(); let scanned=0, started=false;
+  const add=(file,name,folder)=>{
+    const id=nextId++; fileStore.set(id,file);
+    queue.push({id,file,name,folder,path:folder+'/'+name}); total++;
+    perFolder.set(folder,(perFolder.get(folder)||0)+1); scanned++;
+    if(!started){ started=true; startOrContinue(); }               // begin inspecting right away
+    if(scanned%250===0){ setEngine('SCANNING… '+scanned.toLocaleString()); dirty=true; if(running&&!paused) pump(); }
+  };
+  await collector(add);
+  scanning--;
+  for(const [folder,count] of perFolder){ sources.push({folder,count}); }
+  renderSources();
+  if(!scanned && scanning===0 && total===done){ setEngine(done?'DONE':'LOCAL');
+    alert('ไม่พบไฟล์ภาพ (.bmp/.png/.jpg) ในสิ่งที่วางมา'); return; }
+  startOrContinue();
+}
+
+function renderSources(){
+  const box=document.getElementById('srcList'); if(!box) return;
+  document.getElementById('srcBlock').style.display = sources.length?'block':'none';
+  document.getElementById('srcCount').textContent = sources.length+' โฟลเดอร์ · '+total.toLocaleString()+' ไฟล์';
+  box.innerHTML = sources.map(s=>`<div class="src-row"><span class="src-nm" title="${esc(s.folder)}">${esc(s.folder)}</span><span class="src-ct">${s.count.toLocaleString()}</span></div>`).join('');
+}
+/* Start processing, or resume/extend if already going. Never wipes results. */
+function startOrContinue(){
+  if(!workers.length) initPool();
+  if(!startT) startT=performance.now();
+  if(!running){ running=true; lastSampleT=lastSampleT||0; }
+  document.getElementById('pauseBtn').disabled=false;
+  document.getElementById('cancelBtn').disabled=false;
+  document.getElementById('csvBtn').disabled=true;
+  document.getElementById('monEmpty').style.display='none';
+  if(!paused){ setEngine('RUNNING'); pump(); } else setEngine('PAUSED');
+}
+function finish(){
+  running=false;
+  document.getElementById('pauseBtn').disabled=true;
+  document.getElementById('cancelBtn').disabled=true;
+  document.getElementById('csvBtn').disabled=false;
+  setEngine('DONE');
+  renderAll(); flushStats();
+}
+document.getElementById('pauseBtn').addEventListener('click',function(){
+  paused=!paused; this.textContent=paused?'ทำต่อ':'หยุดชั่วคราว'; setEngine(paused?'PAUSED':'RUNNING'); if(!paused) pump();
+});
+document.getElementById('cancelBtn').addEventListener('click',()=>{
+  queue=[]; running=false; jobMap.clear();
+  document.getElementById('pauseBtn').disabled=true; document.getElementById('cancelBtn').disabled=true;
+  document.getElementById('csvBtn').disabled=false; setEngine('STOPPED'); renderAll(); flushStats();
+});
+document.getElementById('resetBtn').addEventListener('click',()=>{ if(running && !confirm('กำลังรันอยู่ ยกเลิกและเริ่มใหม่?'))return; resetRun(true); });
+document.getElementById('thrInput').addEventListener('input',e=>{
+  const v=parseFloat(e.target.value); if(!isNaN(v)){ curThreshold=v; reclassify(); renderAll(); flushStats(); }
+});
+document.getElementById('viewInput').addEventListener('input',e=>{
+  const v=parseFloat(e.target.value); if(!isNaN(v)){ curViewThr=v; reclassify(); renderAll(); flushStats(); }
+});
+document.getElementById('fillInput').addEventListener('input',e=>{
+  const v=parseFloat(e.target.value); if(!isNaN(v)){ curFillThr=v; reclassify(); renderAll(); flushStats(); }
+});
+
+function resetRun(toIntake){
+  queue=[]; results=[]; jobMap.clear(); fileStore.clear();
+  nextId=0; dispatched=0; done=0; total=0; running=false; paused=false; spark=[]; sources=[]; startT=0; scanning=0;
+  ngPage=0; ngFilter='';
+  document.getElementById('ngSearch').value='';
+  document.getElementById('pauseBtn').textContent='หยุดชั่วคราว';
+  renderSources();
+  if(toIntake){ document.getElementById('console').style.display='none'; intake.style.display='block'; setEngine('LOCAL'); }
+  flushStats(); const mc=document.getElementById('monCanvas').getContext('2d'); mc.clearRect(0,0,256,256);
+  document.getElementById('monEmpty').style.display='flex';
+  document.getElementById('monGap').textContent='—'; document.getElementById('monName').textContent='';
+  const mv=document.getElementById('monVerdict'); mv.className='verdict-pill v-ok'; mv.textContent='—';
+}
+function showConsole(){ intake.style.display='none'; document.getElementById('console').style.display='grid'; }
+function setEngine(s){ document.getElementById('engTag').textContent='ENGINE · '+s; }
+
+/* ---------- classification helpers ---------- */
+function pillClass(v){ return v==='OK'?'v-ok':v==='NG'?'v-ng':v==='SKIP'?'v-skip':'v-err'; }
+function verdictOf(r){
+  if(r.iou!=null && r.iou < curViewThr) return 'SKIP';   // other camera angle — not inspected
+  if(r.err||r.gap===null) return 'ERR';
+  return (r.gap>=curThreshold || (r.fill!=null && r.fill>=curFillThr)) ? 'NG' : 'OK';
+}
+function ngReason(r){ const a=[]; if(r.gap>=curThreshold)a.push('ยื่นต่ำ '+r.gap.toFixed(1)+'px');
+  if(r.fill!=null&&r.fill>=curFillThr)a.push('ช่องสว่างถูกถม '+r.fill+' คอลัมน์'); return a.join(' · '); }
+function reclassify(){ /* verdicts derived on the fly from stored gap/fill/iou; nothing to recompute */ }
+
+/* ---------- live monitor ---------- */
+const monCtx=document.getElementById('monCanvas').getContext('2d');
+function drawMonitor(blob, res){
+  const url=URL.createObjectURL(blob);
+  const im=new Image();
+  im.onload=()=>{
+    const vv=verdictOf(res);
+    monCtx.clearRect(0,0,256,256); monCtx.drawImage(im,0,0,256,256);
+    if(vv!=='SKIP' && res.pL&&res.pR&&res.pC){
+      monCtx.lineWidth=1.4;
+      monCtx.strokeStyle='#ff5f6d'; monCtx.beginPath();
+      monCtx.moveTo(res.pL[0],res.pL[1]); monCtx.lineTo(res.pR[0],res.pR[1]); monCtx.stroke();
+      for(const p of [res.pL,res.pR]){ monCtx.fillStyle='#ff5f6d'; monCtx.beginPath(); monCtx.arc(p[0],p[1],2.6,0,7); monCtx.fill(); }
+      monCtx.strokeStyle='#34c6d8'; monCtx.beginPath();
+      monCtx.moveTo(res.pC[0],res.base); monCtx.lineTo(res.pC[0],res.pC[1]); monCtx.stroke();
+      monCtx.fillStyle='#34c6d8'; monCtx.beginPath(); monCtx.arc(res.pC[0],res.pC[1],3,0,7); monCtx.fill();
+    }
+    URL.revokeObjectURL(url);
+    const v=verdictOf(res);
+    document.getElementById('monGap').textContent = (v==='SKIP'||res.gap===null)?'—':res.gap.toFixed(1);
+    const mv=document.getElementById('monVerdict'); mv.textContent=(v==='SKIP'?'ข้าม':v); mv.className='verdict-pill '+pillClass(v);
+    document.getElementById('monName').textContent=res.path;
+  };
+  im.src=url;
+}
+
+/* ---------- stats (batched) ---------- */
+let dirty=false;
+setInterval(()=>{ if(dirty){ flushStats(); dirty=false; } },180);
+function flushStats(){
+  let ok=0,ng=0,er=0,sk=0;
+  for(const r of results){ const v=verdictOf(r); if(v==='OK')ok++; else if(v==='NG')ng++; else if(v==='SKIP')sk++; else er++; }
+  document.getElementById('sProc').textContent=done.toLocaleString();
+  document.getElementById('sOk').textContent=ok.toLocaleString();
+  document.getElementById('sNg').textContent=ng.toLocaleString();
+  document.getElementById('sSkip').textContent=sk.toLocaleString();
+  document.getElementById('sErr').textContent=er.toLocaleString();
+  const el=(performance.now()-startT)/1000;
+  document.getElementById('sTime').textContent=el.toFixed(1)+'s';
+  const spd=el>0?done/el:0;
+  document.getElementById('sSpd').textContent=Math.round(spd);
+  const pct=total?done/total*100:0;
+  document.getElementById('progBar').style.width=pct+'%';
+  document.getElementById('progTxt').textContent=done.toLocaleString()+' / '+total.toLocaleString();
+  const eta=(spd>0&&total>done)?((total-done)/spd):0;
+  document.getElementById('etaTxt').textContent=(running&&total>done)?('เหลือ ~'+eta.toFixed(0)+'s'):'';
+  // sparkline
+  spark.push(spd); if(spark.length>140)spark.shift(); drawSpark();
+}
+const spCtx=document.getElementById('spark').getContext('2d');
+function drawSpark(){
+  const W=560,H=68; spCtx.clearRect(0,0,W,H);
+  if(spark.length<2)return; const mx=Math.max(...spark,1);
+  spCtx.beginPath();
+  spark.forEach((v,i)=>{ const x=i/(spark.length-1)*W, y=H-6-(v/mx)*(H-14); i?spCtx.lineTo(x,y):spCtx.moveTo(x,y); });
+  spCtx.strokeStyle='#34c6d8'; spCtx.lineWidth=1.6; spCtx.stroke();
+  spCtx.lineTo(W,H); spCtx.lineTo(0,H); spCtx.closePath();
+  spCtx.fillStyle='rgba(52,198,216,.10)'; spCtx.fill();
+  spCtx.fillStyle='#5f7183'; spCtx.font='10px ui-monospace'; spCtx.fillText('img/s',6,12);
+}
+
+/* ---------- render tables ---------- */
+let ngPage=0, ngFilter='';
+const PAGE=60;
+function renderAll(){ renderFolders(); renderNG(); }
+function renderFolders(){
+  const map=new Map();
+  for(const r of results){ const f=r.folder||'(root)'; const m=map.get(f)||{t:0,ok:0,ng:0,sk:0,er:0}; m.t++;
+    const v=verdictOf(r); v==='OK'?m.ok++:v==='NG'?m.ng++:v==='SKIP'?m.sk++:m.er++; map.set(f,m); }
+  const rows=[...map.entries()].sort((a,b)=>b[1].ng-a[1].ng);
+  const body=document.getElementById('folderBody'); body.innerHTML='';
+  for(const [f,m] of rows){
+    const insp=m.ok+m.ng; const pctng=insp?(m.ng/insp*100):0;   // %NG over inspected views only
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td style="font-family:var(--mono);font-size:12px">${esc(f)}</td>
+      <td class="num">${m.ok+m.ng}<span style="color:var(--dim)"> +${m.sk}·ข้าม</span></td>
+      <td class="num" style="color:var(--ok)">${m.ok}</td>
+      <td class="num" style="color:var(--ng)">${m.ng}</td>
+      <td class="num">${pctng.toFixed(1)}%</td>
+      <td style="width:90px"><div class="bar-mini"><i style="width:${pctng}%"></i></div></td>`;
+    body.appendChild(tr);
+  }
+  document.getElementById('folderBlock').style.display = rows.length?'block':'none';
+  document.getElementById('folderCount').textContent = rows.length+' โฟลเดอร์';
+}
+function ngList(){ return results.filter(r=>verdictOf(r)==='NG' && (!ngFilter||r.name.toLowerCase().includes(ngFilter))); }
+function renderNG(){
+  const list=ngList();
+  document.getElementById('ngBlock').style.display = results.some(r=>verdictOf(r)==='NG')?'block':'none';
+  document.getElementById('ngCount').textContent = list.length.toLocaleString()+' ไฟล์';
+  const pages=Math.max(1,Math.ceil(list.length/PAGE)); ngPage=Math.min(ngPage,pages-1);
+  const slice=list.slice(ngPage*PAGE,ngPage*PAGE+PAGE);
+  const grid=document.getElementById('ngGrid'); grid.innerHTML='';
+  for(const r of slice){
+    const c=document.createElement('div'); c.className='ng-card';
+    c.innerHTML=`<div class="ph">NG</div><div class="nm" title="${esc(r.path)}">${esc(r.name)}</div>
+      <div class="gp">${esc(ngReason(r))}</div>`;
+    c.onclick=()=>openDetail(r); grid.appendChild(c);
+  }
+  const pg=document.getElementById('ngPager');
+  if(list.length>PAGE){ pg.innerHTML=`<button class="btn ghost" ${ngPage===0?'disabled':''} id="pgPrev">‹ ก่อนหน้า</button>
+    <span>หน้า ${ngPage+1} / ${pages}</span>
+    <button class="btn ghost" ${ngPage>=pages-1?'disabled':''} id="pgNext">ถัดไป ›</button>`;
+    pg.querySelector('#pgPrev').onclick=()=>{ngPage--;renderNG();};
+    pg.querySelector('#pgNext').onclick=()=>{ngPage++;renderNG();};
+  } else pg.innerHTML='';
+}
+document.getElementById('ngSearch').addEventListener('input',e=>{ ngFilter=e.target.value.trim().toLowerCase(); ngPage=0; renderNG(); });
+
+/* ---------- detail modal (re-decode on demand) ---------- */
+const modal=document.getElementById('modal'), mCtx=document.getElementById('mCanvas').getContext('2d');
+document.getElementById('mClose').onclick=()=>modal.classList.remove('on');
+modal.addEventListener('click',e=>{ if(e.target===modal) modal.classList.remove('on'); });
+async function openDetail(r){
+  const file=fileStore.get(r.id); if(!file)return;
+  const bmp=await createImageBitmap(file);
+  mCtx.clearRect(0,0,256,256); mCtx.drawImage(bmp,0,0,256,256); bmp.close();
+  if(r.pL&&r.pR&&r.pC){
+    mCtx.lineWidth=1.4;
+    mCtx.strokeStyle='#ff5f6d'; mCtx.beginPath(); mCtx.moveTo(r.pL[0],r.pL[1]); mCtx.lineTo(r.pR[0],r.pR[1]); mCtx.stroke();
+    for(const p of [r.pL,r.pR]){ mCtx.fillStyle='#ff5f6d'; mCtx.beginPath(); mCtx.arc(p[0],p[1],2.8,0,7); mCtx.fill(); }
+    mCtx.strokeStyle='#34c6d8'; mCtx.beginPath(); mCtx.moveTo(r.pC[0],r.base); mCtx.lineTo(r.pC[0],r.pC[1]); mCtx.stroke();
+    mCtx.fillStyle='#34c6d8'; mCtx.beginPath(); mCtx.arc(r.pC[0],r.pC[1],3.2,0,7); mCtx.fill();
+  }
+  document.getElementById('mTitle').textContent=r.folder;
+  document.getElementById('mPath').textContent=r.path;
+  document.getElementById('mGap').textContent=(r.gap===null?'—':r.gap.toFixed(1))+' px · fill '+(r.fill==null?'—':r.fill);
+  const v=verdictOf(r); const mv=document.getElementById('mVerdict');
+  mv.textContent=v; mv.className='verdict-pill '+(v==='OK'?'v-ok':v==='NG'?'v-ng':'v-err');
+  modal.classList.add('on');
+}
+
+/* ---------- CSV export ---------- */
+document.getElementById('csvBtn').addEventListener('click',()=>{
+  const rows=[['folder','file','verdict','gap_px','gap_fill_cols','view_score_iou','gap_threshold','fill_threshold','view_threshold']];
+  for(const r of results){ rows.push([r.folder, r.name, verdictOf(r),
+    r.gap===null?'':r.gap.toFixed(2), r.fill==null?'':r.fill, r.iou==null?'':r.iou.toFixed(3),
+    curThreshold, curFillThr, curViewThr]); }
+  const csv=rows.map(r=>r.map(c=>/[",\n]/.test(String(c))?'"'+String(c).replace(/"/g,'""')+'"':c).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='inspection_results_'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.csv';
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+});
+
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+</script>
+</body>
+</html>
